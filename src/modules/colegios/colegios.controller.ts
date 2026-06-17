@@ -49,4 +49,10 @@ export class ColegiosController {
   getProfessors(@Param('id') id: string, @Query() query: any, @Headers('authorization') authorization: string) {
     return this.colegiosService.getProfessors(id, query, authorization);
   }
+
+  @Get(':id/admins')
+  @ApiOperation({ summary: 'Listar ADMINs del colegio' })
+  getAdmins(@Param('id') id: string, @Headers('authorization') authorization: string) {
+    return this.colegiosService.getAdmins(id, authorization);
+  }
 }
