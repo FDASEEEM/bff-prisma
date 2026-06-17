@@ -22,6 +22,10 @@ export class AdminService {
     return this.client.get('adminpanel', `/api/admin/tickets/${id}`, { authToken });
   }
 
+  async getTicketsByRequester(requesterId: string, authToken: string) {
+    return this.client.get('adminpanel', `/api/admin/tickets/by-requester/${requesterId}`, { authToken });
+  }
+
   async createTicket(data: any, authToken: string) {
     return this.client.post('adminpanel', '/api/admin/tickets', data, { authToken });
   }
@@ -56,6 +60,10 @@ export class AdminService {
     return this.client.get('adminpanel', '/api/admin/announcements', { params: query, authToken });
   }
 
+  async getActiveAnnouncements(authToken: string) {
+    return this.client.get('adminpanel', '/api/admin/announcements/active', { authToken });
+  }
+
   async createAnnouncement(data: any, authToken: string) {
     return this.client.post('adminpanel', '/api/admin/announcements', data, { authToken });
   }
@@ -66,6 +74,53 @@ export class AdminService {
 
   async deleteAnnouncement(id: string, authToken: string) {
     return this.client.delete('adminpanel', `/api/admin/announcements/${id}`, { authToken });
+  }
+
+  // Audit Logs
+  async getAuditLogs(query: any, authToken: string) {
+    return this.client.get('adminpanel', '/api/admin/audit-logs', { params: query, authToken });
+  }
+
+  // Sessions
+  async getActiveSessions(authToken: string) {
+    return this.client.get('adminpanel', '/api/admin/sessions/active', { authToken });
+  }
+
+  async getHistoricalSessions(authToken: string) {
+    return this.client.get('adminpanel', '/api/admin/sessions/historical', { authToken });
+  }
+
+  async getBlockedSessions(authToken: string) {
+    return this.client.get('adminpanel', '/api/admin/sessions/blocked', { authToken });
+  }
+
+  async getSessionsByUser(userId: string, authToken: string) {
+    return this.client.get('adminpanel', `/api/admin/sessions/user/${userId}`, { authToken });
+  }
+
+  async blockSession(id: string, authToken: string) {
+    return this.client.put('adminpanel', `/api/admin/sessions/${id}/block`, undefined, { authToken });
+  }
+
+  async unblockSession(id: string, authToken: string) {
+    return this.client.put('adminpanel', `/api/admin/sessions/${id}/unblock`, undefined, { authToken });
+  }
+
+  async terminateSession(id: string, authToken: string) {
+    return this.client.put('adminpanel', `/api/admin/sessions/${id}/terminate`, undefined, { authToken });
+  }
+
+  // Notifications
+  async getNotifications(userId: string, authToken: string) {
+    return this.client.get('adminpanel', `/api/admin/notifications?userId=${userId}`, { authToken });
+  }
+
+  async getUnreadNotifications(userId: string, authToken: string) {
+    return this.client.get('adminpanel', `/api/admin/notifications/unread?userId=${userId}`, { authToken });
+  }
+
+  async markNotificationRead(id: string, authToken: string) {
+    return this.client.patch('adminpanel', `/api/admin/notifications/${id}/read`, undefined, { authToken });
   }
 
   // Users

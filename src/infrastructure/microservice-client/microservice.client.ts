@@ -83,4 +83,8 @@ export class MicroserviceClient {
   delete<T = any>(service: ServiceName, path: string, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'DELETE', path, options);
   }
+
+  put<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string }): Promise<T> {
+    return this.request<T>(service, 'PUT', path, { data, ...options });
+  }
 }
