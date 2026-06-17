@@ -6,6 +6,15 @@ import { firstValueFrom } from 'rxjs';
 
 export type ServiceName = 'users' | 'adminpanel' | 'perfil' | 'docs' | 'chat';
 
+/**
+ * Cliente HTTP genérico para consumir microservicios downstream.
+ *
+ * IMPORTANTE: Este cliente NO valida JWTs. Solo reenvía el header `Authorization`
+ * recibido del frontend al microservicio correspondiente. La validación de
+ * autenticación y autorización ocurre en cada microservicio (SupabaseAuthGuard +
+ * RolesGuard). Ver README.md sección "Seguridad y autorización" para detalles.
+ */
+
 @Injectable()
 export class MicroserviceClient {
   private readonly logger = new Logger(MicroserviceClient.name);
