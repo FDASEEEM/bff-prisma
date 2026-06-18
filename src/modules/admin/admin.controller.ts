@@ -50,6 +50,26 @@ export class AdminController {
     return this.adminService.updateUserRole(id, body, authorization);
   }
 
+  @Patch('users/:id/active')
+  @ApiOperation({ summary: 'Activar/Desactivar usuario' })
+  setUserActive(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: { active: boolean },
+    @Headers('authorization') authorization: string,
+  ) {
+    return this.adminService.setUserActive(id, body, authorization);
+  }
+
+  @Post('users/:id/reset-password')
+  @ApiOperation({ summary: 'Resetear password de usuario' })
+  resetUserPassword(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: { newPassword?: string },
+    @Headers('authorization') authorization: string,
+  ) {
+    return this.adminService.resetUserPassword(id, body, authorization);
+  }
+
   // Tickets
   @Get('tickets')
   @ApiOperation({ summary: 'Listar tickets' })

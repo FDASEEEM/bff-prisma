@@ -136,6 +136,14 @@ export class AdminService {
     return this.client.patch('users', `/api/admin/users/${id}/role`, data, { authToken });
   }
 
+  async setUserActive(id: string, data: { active: boolean }, authToken: string) {
+    return this.client.patch('users', `/api/admin/users/${id}/active`, data, { authToken });
+  }
+
+  async resetUserPassword(id: string, data: { newPassword?: string }, authToken: string) {
+    return this.client.post('users', `/api/admin/users/${id}/reset-password`, data, { authToken });
+  }
+
   async getUsersStats(authToken: string) {
     return this.client.get('users', '/api/admin/users/stats', { authToken });
   }

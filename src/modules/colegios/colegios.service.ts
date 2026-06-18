@@ -33,4 +33,8 @@ export class ColegiosService {
   async getProfessors(id: string, query: any, authToken: string) {
     return this.client.get('users', `/api/superadmin/colegios/${id}/professors`, { params: query, authToken });
   }
+
+  async getAdmins(id: string, authToken: string) {
+    return this.client.get('users', `/api/superadmin/colegios/${id}/admins`, { authToken });
+  }
 }
