@@ -102,4 +102,14 @@ describe('ColegiosService', () => {
       { params: { page: '1' }, authToken: 'Bearer token' },
     );
   });
+
+  it('getAdmins should call client.get with id', async () => {
+    client.get.mockResolvedValue({ data: [] });
+    await service.getAdmins('colegio-1', 'Bearer token');
+    expect(client.get).toHaveBeenCalledWith(
+      'users',
+      '/api/superadmin/colegios/colegio-1/admins',
+      { authToken: 'Bearer token' },
+    );
+  });
 });

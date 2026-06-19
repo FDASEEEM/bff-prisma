@@ -146,6 +146,22 @@ describe('MicroserviceClient', () => {
     });
   });
 
+  describe('PUT requests', () => {
+    it('should make a PUT request with data', async () => {
+      httpService.request.mockReturnValue(of(mockResponse({ updated: true })));
+
+      const result = await client.put('users', '/api/test/1', { name: 'Updated' });
+
+      expect(result).toEqual({ updated: true });
+      expect(httpService.request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'PUT',
+          data: { name: 'Updated' },
+        }),
+      );
+    });
+  });
+
   describe('Error handling', () => {
     it('should throw BadGatewayException on network error', async () => {
       httpService.request.mockReturnValue(throwError(() => new Error('Network error')));
@@ -159,6 +175,16 @@ describe('MicroserviceClient', () => {
       const result = await client.get('users', '/api/test');
 
       expect(result).toEqual({ error: 'Not found' });
+    });
+
+    it('should configure validateStatus to accept only status < 500', async () => {
+      httpService.request.mockReturnValue(of(mockResponse({})));
+
+      await client.get('users', '/api/test');
+
+      const config = httpService.request.mock.calls[0][0];
+      expect(config.validateStatus(404)).toBe(true);
+      expect(config.validateStatus(500)).toBe(false);
     });
   });
 
