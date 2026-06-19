@@ -123,4 +123,15 @@ describe('AuthService', () => {
       expect(() => service.extractToken('Basic abc123')).toThrow(UnauthorizedException);
     });
   });
+
+  describe('extractAuthHeader', () => {
+    it('should return the authorization header as-is', () => {
+      const result = service.extractAuthHeader('Bearer abc123');
+      expect(result).toBe('Bearer abc123');
+    });
+
+    it('should throw UnauthorizedException if no header', () => {
+      expect(() => service.extractAuthHeader(undefined)).toThrow(UnauthorizedException);
+    });
+  });
 });
