@@ -15,6 +15,7 @@ describe('JobsService', () => {
           provide: MicroserviceClient,
           useValue: {
             get: jest.fn(),
+            postMultipart: jest.fn(),
           },
         },
       ],
@@ -62,5 +63,29 @@ describe('JobsService', () => {
     client.get.mockResolvedValue({ data: [] });
     await service.getColegioJobs('c1', { page: '1' }, authToken);
     expect(client.get).toHaveBeenCalledWith('docs', '/api/jobs/colegio/c1/jobs', { params: { page: '1' }, authToken });
+  });
+
+  it('uploadJob should forward multipart (fields + files) to docs', async () => {
+    (client.postMultipart as jest.Mock).mockResolvedValue({ id: 'job-1' });
+
+    const files = {
+      planningFile: [{ originalname: 'plan.docx', mimetype: 'application/octet-stream', buffer: Buffer.from('plan') }],
+      paciFile: [{ originalname: 'paci.pdf', mimetype: 'application/pdf', buffer: Buffer.from('paci') }],
+    };
+
+    const result = await service.uploadJob({ prompt: 'adaptar', paciJson: '{}' }, files, authToken);
+
+    expect(result).toEqual({ id: 'job-1' });
+    expect(client.postMultipart).toHaveBeenCalledTimes(1);
+    const [service_, path, form, options] = (client.postMultipart as jest.Mock).mock.calls[0];
+    expect(service_).toBe('docs');
+    expect(path).toBe('/api/jobs/upload');
+    expect(options).toEqual({ authToken });
+    // El form-data lleva los campos de texto y ambos archivos.
+    const serialized = form.getBuffer().toString();
+    expect(serialized).toContain('name="prompt"');
+    expect(serialized).toContain('name="paciJson"');
+    expect(serialized).toContain('filename="plan.docx"');
+    expect(serialized).toContain('filename="paci.pdf"');
   });
 });
