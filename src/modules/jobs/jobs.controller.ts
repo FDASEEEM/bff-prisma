@@ -1,12 +1,62 @@
-import { Controller, Get, Headers, Param, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  UploadedFiles,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JobsService } from './jobs.service';
+
+type UploadedFile = {
+  originalname: string;
+  mimetype: string;
+  buffer: Buffer;
+};
 
 @ApiTags('jobs')
 @ApiBearerAuth()
 @Controller('api/jobs')
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
+
+  @Post('upload')
+  @ApiOperation({ summary: 'Crear job PACI y subir archivos (proxy a ms-docs)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string' },
+        paciJson: { type: 'string' },
+        paciFile: { type: 'string', format: 'binary' },
+        planningFile: { type: 'string', format: 'binary' },
+      },
+      required: ['prompt', 'planningFile'],
+    },
+  })
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'paciFile', maxCount: 1 },
+        { name: 'planningFile', maxCount: 1 },
+      ],
+      { limits: { fileSize: 25 * 1024 * 1024 } },
+    ),
+  )
+  upload(
+    @Body() body: { prompt?: string; paciJson?: string },
+    @UploadedFiles()
+    files: { paciFile?: UploadedFile[]; planningFile?: UploadedFile[] },
+    @Headers('authorization') authorization: string,
+  ) {
+    return this.jobsService.uploadJob(body, files, authorization);
+  }
 
   @Get()
   @ApiOperation({ summary: 'Listar jobs del usuario' })

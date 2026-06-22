@@ -42,6 +42,7 @@ export class MicroserviceClient {
       params?: any;
       headers?: Record<string, string>;
       authToken?: string;
+      isMultipart?: boolean;
     },
   ): Promise<T> {
     const baseUrl = this.getBaseUrl(service);
@@ -53,11 +54,17 @@ export class MicroserviceClient {
       data: options?.data,
       params: options?.params,
       headers: {
-        'Content-Type': 'application/json',
+        // En multipart el Content-Type (con boundary) lo aportan los headers
+        // del form-data; no forzamos application/json.
+        ...(options?.isMultipart ? {} : { 'Content-Type': 'application/json' }),
         ...(options?.authToken ? { Authorization: options.authToken } : {}),
         ...(options?.headers || {}),
       },
       validateStatus: (status) => status < 500,
+      // Permite reenviar archivos grandes (limite real lo aplica ms-docs).
+      ...(options?.isMultipart
+        ? { maxBodyLength: Infinity, maxContentLength: Infinity }
+        : {}),
     };
 
     try {
@@ -95,5 +102,24 @@ export class MicroserviceClient {
 
   put<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'PUT', path, { data, ...options });
+  }
+
+  /**
+   * Reenvia un cuerpo multipart/form-data (subida de archivos) al microservicio.
+   * El `form` debe ser una instancia de `form-data`; sus headers (incluido el
+   * boundary) se propagan tal cual.
+   */
+  postMultipart<T = any>(
+    service: ServiceName,
+    path: string,
+    form: { getHeaders: () => Record<string, string> },
+    options?: { authToken?: string },
+  ): Promise<T> {
+    return this.request<T>(service, 'POST', path, {
+      data: form,
+      headers: form.getHeaders(),
+      authToken: options?.authToken,
+      isMultipart: true,
+    });
   }
 }
