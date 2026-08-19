@@ -1,6 +1,16 @@
-import { Body, Controller, Get, Headers, Patch, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Patch,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 
 @ApiTags('auth')
@@ -24,6 +34,34 @@ export class AuthController {
   @ApiOperation({ summary: 'Refrescar token' })
   async refresh(@Body() body: { refreshToken: string }) {
     return this.authService.refresh(body.refreshToken);
+  }
+
+  @Post('google/url')
+  @ApiOperation({ summary: 'Obtener URL de autorización de Google' })
+  async googleUrl() {
+    return this.authService.getGoogleAuthUrl();
+  }
+
+  @Get('google/callback')
+  @ApiOperation({ summary: 'Callback de Google (intercambia code por sesión)' })
+  async googleCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const session = await this.authService.exchangeGoogleCode(code, state);
+      return res.redirect(this.authService.buildGoogleCallbackRedirect(session));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo completar el login con Google.';
+      const frontUrl = this.authService.getFrontUrl();
+      return res.redirect(
+        `${frontUrl}/auth/callback#error=${encodeURIComponent(message)}`,
+      );
+    }
   }
 
   @Post('logout')

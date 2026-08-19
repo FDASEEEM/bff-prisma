@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { MicroserviceClient } from '../../infrastructure/microservice-client/microservice.client';
 
@@ -11,6 +12,19 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: string) => {
+              const values: Record<string, unknown> = {
+                PORT: 3010,
+                FRONT_URL: 'http://localhost:3002',
+                GOOGLE_CALLBACK_URL: 'http://localhost:3010/api/auth/google/callback',
+              };
+              return values[key];
+            }),
+          },
+        },
         {
           provide: MicroserviceClient,
           useValue: {
@@ -132,6 +146,59 @@ describe('AuthService', () => {
 
     it('should throw UnauthorizedException if no header', () => {
       expect(() => service.extractAuthHeader(undefined)).toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('getGoogleAuthUrl', () => {
+    it('should ask ms-users for the Google URL using the BFF callback', async () => {
+      client.post.mockResolvedValue({ url: 'https://google.com/auth', state: 'pkce-state' });
+
+      const result = await service.getGoogleAuthUrl();
+
+      expect(client.post).toHaveBeenCalledWith('users', '/api/auth/google/url', {
+        redirectTo: 'http://localhost:3010/api/auth/google/callback',
+      });
+      expect(result).toEqual({ url: 'https://google.com/auth', state: 'pkce-state' });
+    });
+  });
+
+  describe('exchangeGoogleCode', () => {
+    it('should forward code/state to ms-users and return the session', async () => {
+      const session = { access_token: 'access', refresh_token: 'refresh', expires_in: 3600, user: { id: '1' } };
+      client.post.mockResolvedValue(session);
+
+      const result = await service.exchangeGoogleCode('code', 'state');
+
+      expect(client.post).toHaveBeenCalledWith('users', '/api/auth/google/callback', {
+        code: 'code',
+        state: 'state',
+      });
+      expect(result).toEqual(session);
+    });
+
+    it('should throw UnauthorizedException when no access_token is returned', async () => {
+      client.post.mockResolvedValue({ message: 'Invalid code' });
+
+      await expect(service.exchangeGoogleCode('code', 'state')).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('buildGoogleCallbackRedirect', () => {
+    it('should build a front URL with tokens in the fragment', () => {
+      const session = {
+        access_token: 'access',
+        refresh_token: 'refresh',
+        expires_in: 3600,
+        user: { id: '1', role: 'TEACHER' },
+      };
+
+      const url = service.buildGoogleCallbackRedirect(session);
+
+      expect(url).toMatch(/^http:\/\/localhost:3002\/auth\/callback#/);
+      expect(url).toContain('access_token=access');
+      expect(url).toContain('refresh_token=refresh');
+      expect(url).toContain('expires_in=3600');
+      expect(url).toContain('user=');
     });
   });
 });
