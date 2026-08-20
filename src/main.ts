@@ -9,15 +9,18 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  const port = configService.get<number>('PORT', 3006);
+  const port = configService.get<number>('PORT', 3010);
   const corsOrigin = configService.get<string>('CORS_ORIGIN', 'http://localhost:3002');
+  const enableCors = configService.get<string>('ENABLE_CORS', 'true') === 'true';
 
-  app.enableCors({
-    origin: corsOrigin.split(',').map(o => o.trim()),
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  });
+  if (enableCors) {
+    app.enableCors({
+      origin: corsOrigin.split(',').map(o => o.trim()),
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

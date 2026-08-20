@@ -1,4 +1,4 @@
-# bff-prisma — NestJS 10 Backend for Frontend  ->  :3006
+# bff-prisma — NestJS 10 Backend for Frontend  ->  :3010
 # Multi-stage: (1) build compila TypeScript, (2) runtime slim.
 
 # Stage 1: build
@@ -24,10 +24,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 ENV NODE_ENV=production
-ENV PORT=3006
+ENV PORT=3010
 
 USER node
 
-EXPOSE 3006
+EXPOSE 3010
 
 CMD ["node", "dist/main.js"]
