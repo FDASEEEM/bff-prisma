@@ -19,6 +19,10 @@ describe('AuthController', () => {
             logout: jest.fn(),
             me: jest.fn(),
             updateMe: jest.fn(),
+            getGoogleAuthUrl: jest.fn(),
+            exchangeGoogleCode: jest.fn(),
+            getFrontUrl: jest.fn(),
+            buildGoogleCallbackRedirect: jest.fn(),
             extractAuthHeader: jest.fn(),
           },
         },
@@ -64,6 +68,42 @@ describe('AuthController', () => {
 
       expect(authService.refresh).toHaveBeenCalledWith('refresh-token-123');
       expect(result).toEqual({ access_token: 'new-token' });
+    });
+  });
+
+  describe('googleUrl', () => {
+    it('should delegate to authService.getGoogleAuthUrl', async () => {
+      authService.getGoogleAuthUrl.mockResolvedValue({ url: 'https://google.com/auth', state: 'pkce-state' });
+
+      const result = await controller.googleUrl();
+
+      expect(authService.getGoogleAuthUrl).toHaveBeenCalled();
+      expect(result).toEqual({ url: 'https://google.com/auth', state: 'pkce-state' });
+    });
+  });
+
+  describe('googleCallback', () => {
+    it('should exchange code/state and redirect to the front callback', async () => {
+      const session = { access_token: 'access', refresh_token: 'refresh', expires_in: 3600, user: { id: '1' } };
+      authService.exchangeGoogleCode.mockResolvedValue(session);
+      authService.buildGoogleCallbackRedirect.mockReturnValue('http://localhost:3002/auth/callback#access_token=access');
+      const res = { redirect: jest.fn() } as any;
+
+      await controller.googleCallback('code', 'state', res);
+
+      expect(authService.exchangeGoogleCode).toHaveBeenCalledWith('code', 'state');
+      expect(authService.buildGoogleCallbackRedirect).toHaveBeenCalledWith(session);
+      expect(res.redirect).toHaveBeenCalledWith('http://localhost:3002/auth/callback#access_token=access');
+    });
+
+    it('should redirect to the front with an error when the exchange fails', async () => {
+      authService.exchangeGoogleCode.mockRejectedValue(new Error('Invalid code'));
+      authService.getFrontUrl.mockReturnValue('http://localhost:3002');
+      const res = { redirect: jest.fn() } as any;
+
+      await controller.googleCallback('bad-code', 'bad-state', res);
+
+      expect(res.redirect).toHaveBeenCalledWith(expect.stringMatching(/^http:\/\/localhost:3002\/auth\/callback#error=/));
     });
   });
 
