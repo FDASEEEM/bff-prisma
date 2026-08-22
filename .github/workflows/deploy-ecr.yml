@@ -10,11 +10,11 @@ name: Build & Push to ECR
 
 on:
   push:
-    branches: [main]
+    branches: [cloud/aws/bff]
   workflow_dispatch:
 
 env:
-  ECR_REPOSITORY: bff-prisma
+  ECR_REPOSITORY: api/bff-prisma
 
 jobs:
   build-and-push:
