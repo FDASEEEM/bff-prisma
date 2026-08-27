@@ -169,22 +169,29 @@ describe('MicroserviceClient', () => {
       await expect(client.get('users', '/api/test')).rejects.toThrow(BadGatewayException);
     });
 
-    it('should not throw on 4xx responses (passed through)', async () => {
-      httpService.request.mockReturnValue(of(mockResponse({ error: 'Not found' }, 404)));
+    it('should throw HttpException with the real status on 4xx responses', async () => {
+      httpService.request.mockReturnValue(of(mockResponse({ statusCode: 404, message: 'Not found' }, 404)));
 
-      const result = await client.get('users', '/api/test');
-
-      expect(result).toEqual({ error: 'Not found' });
+      await expect(client.get('users', '/api/test')).rejects.toMatchObject({
+        status: 404,
+        response: { statusCode: 404, message: 'Not found' },
+      });
     });
 
-    it('should configure validateStatus to accept only status < 500', async () => {
+    it('should throw BadGatewayException on 5xx responses', async () => {
+      httpService.request.mockReturnValue(of(mockResponse({ message: 'boom' }, 502)));
+
+      await expect(client.get('users', '/api/test')).rejects.toThrow(BadGatewayException);
+    });
+
+    it('should configure validateStatus to accept every status so it can decide status handling', async () => {
       httpService.request.mockReturnValue(of(mockResponse({})));
 
       await client.get('users', '/api/test');
 
       const config = httpService.request.mock.calls[0][0];
       expect(config.validateStatus(404)).toBe(true);
-      expect(config.validateStatus(500)).toBe(false);
+      expect(config.validateStatus(500)).toBe(true);
     });
   });
 

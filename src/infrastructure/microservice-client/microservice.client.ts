@@ -1,21 +1,16 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, Logger, BadGatewayException } from '@nestjs/common';
+import { Injectable, Logger, BadGatewayException, HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { firstValueFrom } from 'rxjs';
-import { Request } from 'express';
 
 export type ServiceName = 'users' | 'adminpanel' | 'perfil' | 'docs' | 'chat';
 
 /**
  * Cliente HTTP genérico para consumir microservicios downstream.
  *
- * Cuando API Gateway valida el JWT (Cognito Authorizer), agrega headers
- * con los claims del usuario: X-User-Id, X-User-Email, X-User-Role, X-Colegio-Id.
- * Este cliente los extrae del request y los reenvía a los microservicios.
- *
- * Si no hay headers de gateway (desarrollo local), reenvía el Authorization
- * header tal cual y los downstream validan el JWT via JWKS.
+ * Reenvía el Authorization header tal cual; cada microservicio valida el JWT
+ * de forma independiente vía JWKS. No confía en headers inyectables de gateway.
  */
 
 @Injectable()
@@ -36,23 +31,6 @@ export class MicroserviceClient {
     return url;
   }
 
-  /**
-   * Extrae headers de gateway (API Gateway Cognito Authorizer) del request.
-   * Si el gateway validó el JWT, estos headers contienen los claims.
-   */
-  extractGatewayHeaders(req?: Request): Record<string, string> {
-    if (!req?.headers) return {};
-    const gatewayHeaders: Record<string, string> = {};
-    const gatewayHeaderNames = ['x-user-id', 'x-user-email', 'x-user-role', 'x-colegio-id'];
-    for (const name of gatewayHeaderNames) {
-      const value = req.headers[name];
-      if (typeof value === 'string') {
-        gatewayHeaders[name] = value;
-      }
-    }
-    return gatewayHeaders;
-  }
-
   async request<T = any>(
     service: ServiceName,
     method: string,
@@ -63,7 +41,6 @@ export class MicroserviceClient {
       headers?: Record<string, string>;
       authToken?: string;
       isMultipart?: boolean;
-      gatewayHeaders?: Record<string, string>;
     },
   ): Promise<T> {
     const baseUrl = this.getBaseUrl(service);
@@ -79,11 +56,9 @@ export class MicroserviceClient {
         // del form-data; no forzamos application/json.
         ...(options?.isMultipart ? {} : { 'Content-Type': 'application/json' }),
         ...(options?.authToken ? { Authorization: options.authToken } : {}),
-        // Headers de gateway (API Gateway Cognito Authorizer)
-        ...(options?.gatewayHeaders || {}),
         ...(options?.headers || {}),
       },
-      validateStatus: (status) => status < 500,
+      validateStatus: () => true,
       // Permite reenviar archivos grandes (limite real lo aplica ms-docs).
       ...(options?.isMultipart
         ? { maxBodyLength: Infinity, maxContentLength: Infinity }
@@ -92,38 +67,60 @@ export class MicroserviceClient {
 
     try {
       const response: AxiosResponse<T> = await firstValueFrom(this.httpService.request(config));
-      
-      if (response.status >= 400) {
-        this.logger.warn(`Microservice ${service} returned ${response.status}: ${JSON.stringify(response.data)}`);
+
+      if (response.status >= 500) {
+        this.logger.error(
+          `Microservice ${service} returned ${response.status}: ${JSON.stringify(response.data)}`,
+        );
+        throw new BadGatewayException(
+          `Microservice ${service} is unavailable (${response.status})`,
+        );
       }
-      
+
+      if (response.status >= 400) {
+        this.logger.warn(
+          `Microservice ${service} returned ${response.status}: ${JSON.stringify(response.data)}`,
+        );
+        // Propagate the real status to the client (NestJS serializes HttpException
+        // with the correct HTTP code), so e.g. a 401 triggers the front's
+        // session-expired handling instead of being swallowed as 200.
+        throw new HttpException(response.data, response.status);
+      }
+
       return response.data;
     } catch (error) {
-      this.logger.error(`Error calling ${service} ${method} ${path}: ${error.message}`);
+      // Loggeamos el detalle completo (incl. URL/stack) server-side, pero nunca
+      // lo exponemos al cliente para no filtrar URLs/puertos internos (M4).
+      this.logger.error(
+        `Error calling ${service} ${method} ${path}: ${(error as Error)?.stack || error}`,
+      );
+      if (error instanceof HttpException) {
+        throw error;
+      }
       throw new BadGatewayException(
-        `Error communicating with ${service} service: ${error.message}`,
+        `Error communicating with ${service} service`,
       );
     }
   }
 
-  // Convenience methods — gatewayHeaders se extraen del request del controller
-  get<T = any>(service: ServiceName, path: string, options?: { params?: any; authToken?: string; gatewayHeaders?: Record<string, string> }): Promise<T> {
+  // Convenience methods — el Authorization lo aporta el controller
+  get<T = any>(service: ServiceName, path: string, options?: { params?: any; authToken?: string }): Promise<T> {
     return this.request<T>(service, 'GET', path, options);
   }
 
-  post<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string; gatewayHeaders?: Record<string, string> }): Promise<T> {
+  post<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'POST', path, { data, ...options });
   }
 
-  patch<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string; gatewayHeaders?: Record<string, string> }): Promise<T> {
+  patch<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'PATCH', path, { data, ...options });
   }
 
-  delete<T = any>(service: ServiceName, path: string, options?: { authToken?: string; gatewayHeaders?: Record<string, string> }): Promise<T> {
+  delete<T = any>(service: ServiceName, path: string, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'DELETE', path, options);
   }
 
-  put<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string; gatewayHeaders?: Record<string, string> }): Promise<T> {
+  put<T = any>(service: ServiceName, path: string, data?: any, options?: { authToken?: string }): Promise<T> {
     return this.request<T>(service, 'PUT', path, { data, ...options });
   }
 
@@ -136,13 +133,12 @@ export class MicroserviceClient {
     service: ServiceName,
     path: string,
     form: { getHeaders: () => Record<string, string> },
-    options?: { authToken?: string; gatewayHeaders?: Record<string, string> },
+    options?: { authToken?: string },
   ): Promise<T> {
     return this.request<T>(service, 'POST', path, {
       data: form,
       headers: form.getHeaders(),
       authToken: options?.authToken,
-      gatewayHeaders: options?.gatewayHeaders,
       isMultipart: true,
     });
   }

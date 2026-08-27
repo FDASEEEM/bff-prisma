@@ -38,8 +38,18 @@ export class AuthController {
 
   @Post('google/url')
   @ApiOperation({ summary: 'Obtener URL de autorización de Google' })
-  async googleUrl() {
-    return this.authService.getGoogleAuthUrl();
+  async googleUrl(@Res({ passthrough: true }) res: Response) {
+    const { url, state } = await this.authService.getGoogleAuthUrl();
+    // Persistimos el state en un cookie HttpOnly + SameSite=Lax para validarlo
+    // en el callback (login CSRF / inyección de authorization code).
+    res.cookie('prisma_oauth_state', state, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 10 * 60 * 1000, // 10 min
+      path: '/',
+    });
+    return { url };
   }
 
   @Get('google/callback')
@@ -47,17 +57,29 @@ export class AuthController {
   async googleCallback(
     @Query('code') code: string,
     @Query('state') state: string,
-    @Res() res: Response,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
+    const frontUrl = this.authService.getFrontUrl();
     try {
-      const session = await this.authService.exchangeGoogleCode(code, state);
+      // Rechazamos si el state del callback no coincide con el que emitimos y
+      // guardamos en cookie (tiempo de vida corto). Esto impide login CSRF.
+      const expectedState = this.readOauthStateCookie(req);
+      res.clearCookie('prisma_oauth_state', { path: '/' });
+
+      if (!expectedState || expectedState !== state) {
+        return res.redirect(
+          `${frontUrl}/auth/callback#error=${encodeURIComponent('Invalid OAuth state.')}`,
+        );
+      }
+
+      const session = await this.authService.exchangeGoogleCode(code, state, expectedState);
       return res.redirect(this.authService.buildGoogleCallbackRedirect(session));
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : 'No se pudo completar el login con Google.';
-      const frontUrl = this.authService.getFrontUrl();
       return res.redirect(
         `${frontUrl}/auth/callback#error=${encodeURIComponent(message)}`,
       );
@@ -86,5 +108,16 @@ export class AuthController {
   async updateMe(@Headers('authorization') authorization: string, @Body() body: any) {
     const authHeader = this.authService.extractAuthHeader(authorization);
     return this.authService.updateMe(authHeader, body);
+  }
+
+  private readOauthStateCookie(req: Request): string | undefined {
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) return undefined;
+    const match = cookieHeader
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith('prisma_oauth_state='));
+    if (!match) return undefined;
+    return decodeURIComponent(match.slice('prisma_oauth_state='.length));
   }
 }

@@ -38,10 +38,11 @@ export class AuthService {
     return this.client.post('users', '/api/auth/google/url', { redirectTo });
   }
 
-  async exchangeGoogleCode(code: string, state: string) {
+  async exchangeGoogleCode(code: string, state: string, expectedState?: string) {
     const session = await this.client.post('users', '/api/auth/google/callback', {
       code,
       state,
+      ...(expectedState ? { expectedState } : {}),
     });
 
     if (!session || !session.access_token) {

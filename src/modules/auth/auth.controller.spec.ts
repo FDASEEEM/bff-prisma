@@ -72,36 +72,55 @@ describe('AuthController', () => {
   });
 
   describe('googleUrl', () => {
-    it('should delegate to authService.getGoogleAuthUrl', async () => {
+    it('should delegate to authService.getGoogleAuthUrl and return the url', async () => {
       authService.getGoogleAuthUrl.mockResolvedValue({ url: 'https://google.com/auth', state: 'pkce-state' });
+      const res = { cookie: jest.fn() } as any;
 
-      const result = await controller.googleUrl();
+      const result = await controller.googleUrl(res);
 
       expect(authService.getGoogleAuthUrl).toHaveBeenCalled();
-      expect(result).toEqual({ url: 'https://google.com/auth', state: 'pkce-state' });
+      expect(res.cookie).toHaveBeenCalledWith(
+        'prisma_oauth_state',
+        'pkce-state',
+        expect.objectContaining({ httpOnly: true }),
+      );
+      expect(result).toEqual({ url: 'https://google.com/auth' });
     });
   });
 
   describe('googleCallback', () => {
-    it('should exchange code/state and redirect to the front callback', async () => {
+    it('should exchange code/state and redirect to the front callback when state matches the cookie', async () => {
       const session = { access_token: 'access', refresh_token: 'refresh', expires_in: 3600, user: { id: '1' } };
       authService.exchangeGoogleCode.mockResolvedValue(session);
       authService.buildGoogleCallbackRedirect.mockReturnValue('http://localhost:3002/auth/callback#access_token=access');
-      const res = { redirect: jest.fn() } as any;
+      const req = { headers: { cookie: 'prisma_oauth_state=pkce-state' } } as any;
+      const res = { redirect: jest.fn(), clearCookie: jest.fn() } as any;
 
-      await controller.googleCallback('code', 'state', res);
+      await controller.googleCallback('code', 'pkce-state', req, res);
 
-      expect(authService.exchangeGoogleCode).toHaveBeenCalledWith('code', 'state');
+      expect(authService.exchangeGoogleCode).toHaveBeenCalledWith('code', 'pkce-state', 'pkce-state');
       expect(authService.buildGoogleCallbackRedirect).toHaveBeenCalledWith(session);
       expect(res.redirect).toHaveBeenCalledWith('http://localhost:3002/auth/callback#access_token=access');
+    });
+
+    it('should redirect with an error when the state does not match the cookie', async () => {
+      authService.getFrontUrl.mockReturnValue('http://localhost:3002');
+      const req = { headers: { cookie: 'prisma_oauth_state=other-state' } } as any;
+      const res = { redirect: jest.fn(), clearCookie: jest.fn() } as any;
+
+      await controller.googleCallback('code', 'state', req, res);
+
+      expect(authService.exchangeGoogleCode).not.toHaveBeenCalled();
+      expect(res.redirect).toHaveBeenCalledWith(expect.stringMatching(/^http:\/\/localhost:3002\/auth\/callback#error=/));
     });
 
     it('should redirect to the front with an error when the exchange fails', async () => {
       authService.exchangeGoogleCode.mockRejectedValue(new Error('Invalid code'));
       authService.getFrontUrl.mockReturnValue('http://localhost:3002');
-      const res = { redirect: jest.fn() } as any;
+      const req = { headers: { cookie: 'prisma_oauth_state=bad-state' } } as any;
+      const res = { redirect: jest.fn(), clearCookie: jest.fn() } as any;
 
-      await controller.googleCallback('bad-code', 'bad-state', res);
+      await controller.googleCallback('bad-code', 'bad-state', req, res);
 
       expect(res.redirect).toHaveBeenCalledWith(expect.stringMatching(/^http:\/\/localhost:3002\/auth\/callback#error=/));
     });

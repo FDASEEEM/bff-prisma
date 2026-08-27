@@ -1,8 +1,9 @@
-import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { HealthController } from './health.controller';
 import { MicroserviceClientModule } from './infrastructure/microservice-client/microservice.module';
-import { GatewayHeadersMiddleware } from './infrastructure/middleware/gateway-headers.middleware';
+import { AllExceptionsFilter } from './infrastructure/filters/all-exceptions.filter';
 import { AuthModule } from './modules/auth/auth.module';
 import { ColegiosModule } from './modules/colegios/colegios.module';
 import { ProfessorsModule } from './modules/professors/professors.module';
@@ -24,9 +25,11 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     DashboardModule,
   ],
   controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+  ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(GatewayHeadersMiddleware).forRoutes('*');
-  }
-}
+export class AppModule {}
